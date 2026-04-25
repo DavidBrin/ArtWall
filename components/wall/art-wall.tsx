@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useEffect, useEffectEvent, useRef, useState } from "react";
+import { startTransition, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import type { RealtimePostgresInsertPayload } from "@supabase/supabase-js";
 import { serializeStrokeRow } from "@/lib/api/wall";
 import { getBrowserSupabase } from "@/lib/supabase/browser";
@@ -14,12 +14,50 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 };
 
+type ToolMode = "brush" | "eraser";
+type WallPresetId = "street" | "ideas" | "chalkboard";
+
+type WallPreset = {
+  id: WallPresetId;
+  label: string;
+  imageUrl: string;
+  eraserColor: string;
+};
+
 const BRUSH_WIDTH = 4;
-const BRUSH_COLORS = ["#1f1b18", "#7a3b2a", "#25586e", "#89612e", "#3f6b4c"];
+const ERASER_WIDTH = 18;
+const COLOR_OPTIONS = [
+  { value: "#1f1b18", label: "Charcoal" },
+  { value: "#7a3b2a", label: "Clay" },
+  { value: "#25586e", label: "Ocean" },
+  { value: "#89612e", label: "Ochre" },
+  { value: "#3f6b4c", label: "Moss" },
+  { value: "#f2ecdf", label: "Chalk" },
+] as const;
+
+const WALL_PRESETS: WallPreset[] = [
+  {
+    id: "street",
+    label: "Landing / Street",
+    imageUrl: "/walls/street-wall.svg",
+    eraserColor: "#d5d1cb",
+  },
+  {
+    id: "ideas",
+    label: "Ideas",
+    imageUrl: "/walls/ideas-wall.svg",
+    eraserColor: "#f4e9cd",
+  },
+  {
+    id: "chalkboard",
+    label: "Chalkboard",
+    imageUrl: "/walls/chalkboard-wall.svg",
+    eraserColor: "#224236",
+  },
+];
 
 type ClientSession = {
   id: string;
-  color: string;
   isIos: boolean;
 };
 
@@ -38,16 +76,6 @@ function createClientId() {
   return created;
 }
 
-function pickBrushColor(clientId: string) {
-  let hash = 0;
-
-  for (const char of clientId) {
-    hash = (hash * 31 + char.charCodeAt(0)) % BRUSH_COLORS.length;
-  }
-
-  return BRUSH_COLORS[Math.abs(hash) % BRUSH_COLORS.length];
-}
-
 function isIosDevice() {
   if (typeof navigator === "undefined") {
     return false;
@@ -60,15 +88,12 @@ function getClientSession(): ClientSession {
   if (typeof window === "undefined") {
     return {
       id: "anon-preview",
-      color: BRUSH_COLORS[0],
       isIos: false,
     };
   }
 
-  const id = createClientId();
   return {
-    id,
-    color: pickBrushColor(id),
+    id: createClientId(),
     isIos: isIosDevice(),
   };
 }
@@ -102,6 +127,17 @@ export function ArtWall() {
   const [isStandalone, setIsStandalone] = useState(() =>
     typeof window === "undefined" ? false : isStandaloneDisplayMode(),
   );
+  const [toolMode, setToolMode] = useState<ToolMode>("brush");
+  const [activeColor, setActiveColor] = useState<string>(COLOR_OPTIONS[0].value);
+  const [activeWall, setActiveWall] = useState<WallPresetId>("street");
+
+  const activeWallPreset = useMemo(
+    () => WALL_PRESETS.find((preset) => preset.id === activeWall) ?? WALL_PRESETS[0],
+    [activeWall],
+  );
+
+  const drawColor = toolMode === "eraser" ? activeWallPreset.eraserColor : activeColor;
+  const drawWidth = toolMode === "eraser" ? ERASER_WIDTH : BRUSH_WIDTH;
 
   const loadWall = useEffectEvent(async () => {
     try {
@@ -243,16 +279,16 @@ export function ArtWall() {
     const optimisticId = `local-${crypto.randomUUID()}`;
     const strokeSignature = JSON.stringify({
       points: input.points,
-      color: clientSession.color,
-      width: BRUSH_WIDTH,
+      color: drawColor,
+      width: drawWidth,
       clientId: clientSession.id,
     });
     pendingStrokeSignaturesRef.current.add(strokeSignature);
     const optimisticStroke: Stroke = {
       id: optimisticId,
       points: input.points,
-      color: clientSession.color,
-      width: BRUSH_WIDTH,
+      color: drawColor,
+      width: drawWidth,
       createdAt: new Date().toISOString(),
       clientId: clientSession.id,
     };
@@ -269,8 +305,8 @@ export function ArtWall() {
         },
         body: JSON.stringify({
           points: input.points,
-          color: clientSession.color,
-          width: BRUSH_WIDTH,
+          color: drawColor,
+          width: drawWidth,
           clientId: clientSession.id,
         } satisfies CreateStrokeInput),
       });
@@ -317,15 +353,16 @@ export function ArtWall() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[var(--background)]">
+    <main className="relative min-h-dvh overflow-hidden bg-[var(--background)]">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(239,182,113,0.42),_transparent_26%),radial-gradient(circle_at_bottom_right,_rgba(37,88,110,0.16),_transparent_28%)]" />
       <div className="absolute inset-0 bg-[linear-gradient(115deg,_rgba(255,255,255,0.58),_transparent_42%,rgba(72,42,20,0.05)_100%)]" />
 
       <CanvasSurface
         ref={canvasRef}
-        color={clientSession.color}
+        color={drawColor}
         strokes={strokes}
-        width={BRUSH_WIDTH}
+        wallImageUrl={activeWallPreset.imageUrl}
+        width={drawWidth}
         onCommit={handleStrokeCommit}
       />
 
@@ -343,9 +380,17 @@ export function ArtWall() {
       </div>
 
       <FloatingControls
+        activeColor={activeColor}
+        activeWall={activeWall}
+        colorOptions={[...COLOR_OPTIONS]}
+        installAvailable={Boolean(installPrompt)}
         isIos={clientSession.isIos}
         isMenuOpen={menuOpen}
         isStandalone={isStandalone}
+        onColorChange={(color) => {
+          setToolMode("brush");
+          setActiveColor(color);
+        }}
         onInstall={handleInstall}
         onOpenAbout={() => {
           setMenuOpen(false);
@@ -353,8 +398,11 @@ export function ArtWall() {
         }}
         onSaveImage={handleSave}
         onToggleMenu={() => setMenuOpen((current) => !current)}
-        installAvailable={Boolean(installPrompt)}
+        onToolModeChange={setToolMode}
+        onWallChange={setActiveWall}
         statusMessage={statusMessage}
+        toolMode={toolMode}
+        wallOptions={WALL_PRESETS.map(({ id, label }) => ({ id, label }))}
       />
 
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />

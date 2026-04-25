@@ -15,6 +15,7 @@ type CanvasSurfaceProps = {
   strokes: Stroke[];
   color: string;
   width: number;
+  wallImageUrl: string;
   onCommit: (stroke: { points: Point[] }) => Promise<void> | void;
 };
 
@@ -23,7 +24,7 @@ export type CanvasSurfaceHandle = {
 };
 
 export const CanvasSurface = forwardRef<CanvasSurfaceHandle, CanvasSurfaceProps>(
-  function CanvasSurface({ strokes, color, width, onCommit }, ref) {
+  function CanvasSurface({ strokes, color, width, wallImageUrl, onCommit }, ref) {
     const containerRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const drawingRef = useRef(false);
@@ -196,11 +197,12 @@ export const CanvasSurface = forwardRef<CanvasSurfaceHandle, CanvasSurfaceProps>
 
     return (
       <section
-        className="relative min-h-screen w-full cursor-crosshair overflow-hidden touch-none"
+        className="relative min-h-dvh w-full cursor-crosshair overflow-hidden touch-none bg-cover bg-center bg-no-repeat"
         ref={containerRef}
+        style={{ backgroundImage: `url(${wallImageUrl})` }}
       >
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,_rgba(255,255,255,0.45),_transparent_26%,rgba(82,58,38,0.09)_100%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.38),_transparent_42%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,_rgba(255,255,255,0.33),_transparent_26%,rgba(82,58,38,0.12)_100%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.28),_transparent_42%)]" />
         <canvas
           aria-label="Shared digital art wall"
           className="absolute inset-0 h-full w-full touch-none"
