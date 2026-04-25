@@ -2,9 +2,17 @@
 
 import { startTransition, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import type { RealtimePostgresInsertPayload } from "@supabase/supabase-js";
-import { serializeStrokeRow } from "@/lib/api/wall";
+import { serializeStrokeRow, serializeTextRow } from "@/lib/api/wall";
 import { getBrowserSupabase } from "@/lib/supabase/browser";
-import type { CreateStrokeInput, Stroke, WallResponse } from "@/lib/types/wall";
+import type {
+  CreateStrokeInput,
+  CreateTextInput,
+  Stroke,
+  WallItem,
+  WallPresetId,
+  WallResponse,
+  WallText,
+} from "@/lib/types/wall";
 import { AboutDialog } from "./about-dialog";
 import { CanvasSurface, type CanvasSurfaceHandle } from "./canvas-surface";
 import { FloatingControls } from "./floating-controls";
@@ -14,8 +22,7 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 };
 
-type ToolMode = "brush" | "eraser";
-type WallPresetId = "street" | "ideas" | "chalkboard";
+type ToolMode = "brush" | "eraser" | "text";
 
 type WallPreset = {
   id: WallPresetId;
@@ -24,14 +31,24 @@ type WallPreset = {
   eraserColor: string;
 };
 
-const BRUSH_WIDTH = 4;
-const ERASER_WIDTH = 18;
+type ClientSession = {
+  id: string;
+  isIos: boolean;
+};
+
+const DEFAULT_BRUSH_WIDTH = 4;
+const DEFAULT_ERASER_WIDTH = 18;
+const DEFAULT_TEXT_SIZE = 34;
 const COLOR_OPTIONS = [
   { value: "#1f1b18", label: "Charcoal" },
   { value: "#7a3b2a", label: "Clay" },
   { value: "#25586e", label: "Ocean" },
   { value: "#89612e", label: "Ochre" },
   { value: "#3f6b4c", label: "Moss" },
+  { value: "#6c2b5c", label: "Mulberry" },
+  { value: "#c55036", label: "Terracotta" },
+  { value: "#d4a017", label: "Amber" },
+  { value: "#4b60b8", label: "Indigo" },
   { value: "#f2ecdf", label: "Chalk" },
 ] as const;
 
@@ -39,8 +56,8 @@ const WALL_PRESETS: WallPreset[] = [
   {
     id: "street",
     label: "Landing / Street",
-    imageUrl: "/walls/street-wall.svg",
-    eraserColor: "#d5d1cb",
+    imageUrl: "/walls/solid-concrete-wall.jpg",
+    eraserColor: "#d1d0cc",
   },
   {
     id: "ideas",
@@ -55,11 +72,6 @@ const WALL_PRESETS: WallPreset[] = [
     eraserColor: "#224236",
   },
 ];
-
-type ClientSession = {
-  id: string;
-  isIos: boolean;
-};
 
 function createClientId() {
   if (typeof window === "undefined") {
@@ -114,11 +126,23 @@ function isStandaloneDisplayMode() {
   );
 }
 
+function insertWallItem(current: WallItem[], incoming: WallItem) {
+  if (current.some((item) => item.id === incoming.id)) {
+    return current;
+  }
+
+  return [...current, incoming].sort(
+    (left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
+  );
+}
+
 export function ArtWall() {
   const canvasRef = useRef<CanvasSurfaceHandle>(null);
   const pendingStrokeSignaturesRef = useRef(new Set<string>());
+  const pendingTextSignaturesRef = useRef(new Set<string>());
+  const loadRequestRef = useRef(0);
   const [clientSession] = useState(getClientSession);
-  const [strokes, setStrokes] = useState<Stroke[]>([]);
+  const [items, setItems] = useState<WallItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -130,6 +154,9 @@ export function ArtWall() {
   const [toolMode, setToolMode] = useState<ToolMode>("brush");
   const [activeColor, setActiveColor] = useState<string>(COLOR_OPTIONS[0].value);
   const [activeWall, setActiveWall] = useState<WallPresetId>("street");
+  const [brushSize, setBrushSize] = useState(DEFAULT_BRUSH_WIDTH);
+  const [eraserSize, setEraserSize] = useState(DEFAULT_ERASER_WIDTH);
+  const [textSize, setTextSize] = useState(DEFAULT_TEXT_SIZE);
 
   const activeWallPreset = useMemo(
     () => WALL_PRESETS.find((preset) => preset.id === activeWall) ?? WALL_PRESETS[0],
@@ -137,11 +164,11 @@ export function ArtWall() {
   );
 
   const drawColor = toolMode === "eraser" ? activeWallPreset.eraserColor : activeColor;
-  const drawWidth = toolMode === "eraser" ? ERASER_WIDTH : BRUSH_WIDTH;
+  const drawWidth = toolMode === "eraser" ? eraserSize : brushSize;
 
-  const loadWall = useEffectEvent(async () => {
+  const loadWall = useEffectEvent(async (wallId: WallPresetId, requestId: number) => {
     try {
-      const response = await fetch("/api/wall", {
+      const response = await fetch(`/api/wall?wallId=${wallId}`, {
         cache: "no-store",
       });
 
@@ -150,15 +177,27 @@ export function ArtWall() {
       }
 
       const data = (await response.json()) as WallResponse;
+
+      if (requestId !== loadRequestRef.current) {
+        return;
+      }
+
       startTransition(() => {
-        setStrokes(data.strokes);
+        setItems(data.items);
       });
       setStatusMessage(null);
     } catch (error) {
       console.error("Failed to load wall", error);
+
+      if (requestId !== loadRequestRef.current) {
+        return;
+      }
+
       setStatusMessage("Live wall unavailable until Supabase is configured.");
     } finally {
-      setIsLoading(false);
+      if (requestId === loadRequestRef.current) {
+        setIsLoading(false);
+      }
     }
   });
 
@@ -176,15 +215,20 @@ export function ArtWall() {
 
   useEffect(() => {
     void registerServiceWorker();
+  }, []);
+
+  useEffect(() => {
+    loadRequestRef.current += 1;
+    const requestId = loadRequestRef.current;
 
     const frame = window.requestAnimationFrame(() => {
-      void loadWall();
+      void loadWall(activeWall, requestId);
     });
 
     return () => {
       window.cancelAnimationFrame(frame);
     };
-  }, []);
+  }, [activeWall]);
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (event: Event) => {
@@ -221,17 +265,19 @@ export function ArtWall() {
     try {
       const supabase = getBrowserSupabase();
       const channel = supabase
-        .channel("digital-art-wall")
+        .channel(`digital-art-wall:${activeWall}`)
         .on(
           "postgres_changes",
           {
             event: "INSERT",
             schema: "public",
             table: "strokes",
+            filter: `wall_id=eq.${activeWall}`,
           },
           (payload: RealtimePostgresInsertPayload<Record<string, unknown>>) => {
             const incoming = serializeStrokeRow({
               id: String(payload.new.id),
+              wall_id: String(payload.new.wall_id),
               points: payload.new.points,
               color: String(payload.new.color),
               width: Number(payload.new.width),
@@ -240,6 +286,7 @@ export function ArtWall() {
             });
 
             const incomingSignature = JSON.stringify({
+              wallId: incoming.wallId,
               points: incoming.points,
               color: incoming.color,
               width: incoming.width,
@@ -255,9 +302,49 @@ export function ArtWall() {
             }
 
             startTransition(() => {
-              setStrokes((current) =>
-                current.some((stroke) => stroke.id === incoming.id) ? current : [...current, incoming],
-              );
+              setItems((current) => insertWallItem(current, incoming));
+            });
+          },
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "wall_texts",
+            filter: `wall_id=eq.${activeWall}`,
+          },
+          (payload: RealtimePostgresInsertPayload<Record<string, unknown>>) => {
+            const incoming = serializeTextRow({
+              id: String(payload.new.id),
+              wall_id: String(payload.new.wall_id),
+              text: String(payload.new.text),
+              position: payload.new.position,
+              color: String(payload.new.color),
+              font_size: Number(payload.new.font_size),
+              created_at: String(payload.new.created_at),
+              client_id: String(payload.new.client_id),
+            });
+
+            const incomingSignature = JSON.stringify({
+              wallId: incoming.wallId,
+              text: incoming.text,
+              position: incoming.position,
+              color: incoming.color,
+              fontSize: incoming.fontSize,
+              clientId: incoming.clientId,
+            });
+
+            if (
+              incoming.clientId === clientSession.id &&
+              pendingTextSignaturesRef.current.has(incomingSignature)
+            ) {
+              pendingTextSignaturesRef.current.delete(incomingSignature);
+              return;
+            }
+
+            startTransition(() => {
+              setItems((current) => insertWallItem(current, incoming));
             });
           },
         )
@@ -273,19 +360,23 @@ export function ArtWall() {
     return () => {
       unsubscribe();
     };
-  }, [clientSession.id]);
+  }, [activeWall, clientSession.id]);
 
-  async function handleStrokeCommit(input: Omit<CreateStrokeInput, "clientId" | "color" | "width">) {
-    const optimisticId = `local-${crypto.randomUUID()}`;
+  async function handleStrokeCommit(input: Omit<CreateStrokeInput, "clientId" | "color" | "width" | "wallId">) {
+    const optimisticId = `local-stroke-${crypto.randomUUID()}`;
     const strokeSignature = JSON.stringify({
+      wallId: activeWall,
       points: input.points,
       color: drawColor,
       width: drawWidth,
       clientId: clientSession.id,
     });
     pendingStrokeSignaturesRef.current.add(strokeSignature);
+
     const optimisticStroke: Stroke = {
+      kind: "stroke",
       id: optimisticId,
+      wallId: activeWall,
       points: input.points,
       color: drawColor,
       width: drawWidth,
@@ -294,7 +385,7 @@ export function ArtWall() {
     };
 
     startTransition(() => {
-      setStrokes((current) => [...current, optimisticStroke]);
+      setItems((current) => insertWallItem(current, optimisticStroke));
     });
 
     try {
@@ -304,6 +395,7 @@ export function ArtWall() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          wallId: activeWall,
           points: input.points,
           color: drawColor,
           width: drawWidth,
@@ -318,8 +410,8 @@ export function ArtWall() {
       const data = (await response.json()) as { stroke: Stroke };
       pendingStrokeSignaturesRef.current.delete(strokeSignature);
       startTransition(() => {
-        setStrokes((current) =>
-          current.map((stroke) => (stroke.id === optimisticId ? data.stroke : stroke)),
+        setItems((current) =>
+          current.map((item) => (item.id === optimisticId ? data.stroke : item)),
         );
       });
       setStatusMessage(null);
@@ -327,9 +419,75 @@ export function ArtWall() {
       console.error("Failed to save stroke", error);
       pendingStrokeSignaturesRef.current.delete(strokeSignature);
       startTransition(() => {
-        setStrokes((current) => current.filter((stroke) => stroke.id !== optimisticId));
+        setItems((current) => current.filter((item) => item.id !== optimisticId));
       });
       setStatusMessage("Stroke not saved. Check the connection and try again.");
+    }
+  }
+
+  async function handleTextCommit(input: Omit<CreateTextInput, "clientId" | "color" | "wallId">) {
+    const optimisticId = `local-text-${crypto.randomUUID()}`;
+    const textSignature = JSON.stringify({
+      wallId: activeWall,
+      text: input.text,
+      position: input.position,
+      color: activeColor,
+      fontSize: input.fontSize,
+      clientId: clientSession.id,
+    });
+    pendingTextSignaturesRef.current.add(textSignature);
+
+    const optimisticText: WallText = {
+      kind: "text",
+      id: optimisticId,
+      wallId: activeWall,
+      text: input.text,
+      position: input.position,
+      color: activeColor,
+      fontSize: input.fontSize,
+      createdAt: new Date().toISOString(),
+      clientId: clientSession.id,
+    };
+
+    startTransition(() => {
+      setItems((current) => insertWallItem(current, optimisticText));
+    });
+
+    try {
+      const response = await fetch("/api/wall/texts", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          wallId: activeWall,
+          text: input.text,
+          position: input.position,
+          color: activeColor,
+          fontSize: input.fontSize,
+          clientId: clientSession.id,
+        } satisfies CreateTextInput),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Unable to save text: ${response.status}`);
+      }
+
+      const data = (await response.json()) as { text: WallText };
+      pendingTextSignaturesRef.current.delete(textSignature);
+      startTransition(() => {
+        setItems((current) =>
+          current.map((item) => (item.id === optimisticId ? data.text : item)),
+        );
+      });
+      setStatusMessage(null);
+    } catch (error) {
+      console.error("Failed to save text", error);
+      pendingTextSignaturesRef.current.delete(textSignature);
+      startTransition(() => {
+        setItems((current) => current.filter((item) => item.id !== optimisticId));
+      });
+      setStatusMessage("Text not saved. Check the connection and try again.");
     }
   }
 
@@ -349,7 +507,7 @@ export function ArtWall() {
   }
 
   function handleSave() {
-    canvasRef.current?.savePng(`digital-art-wall-${new Date().toISOString().slice(0, 10)}.png`);
+    canvasRef.current?.savePng(`digital-art-wall-${activeWall}-${new Date().toISOString().slice(0, 10)}.png`);
   }
 
   return (
@@ -360,10 +518,13 @@ export function ArtWall() {
       <CanvasSurface
         ref={canvasRef}
         color={drawColor}
-        strokes={strokes}
+        items={items}
+        textFontSize={textSize}
+        toolMode={toolMode}
         wallImageUrl={activeWallPreset.imageUrl}
         width={drawWidth}
-        onCommit={handleStrokeCommit}
+        onCommitStroke={handleStrokeCommit}
+        onCommitText={handleTextCommit}
       />
 
       <div className="pointer-events-none absolute inset-x-4 top-4 flex justify-center">
@@ -382,25 +543,40 @@ export function ArtWall() {
       <FloatingControls
         activeColor={activeColor}
         activeWall={activeWall}
+        brushSize={brushSize}
         colorOptions={[...COLOR_OPTIONS]}
+        eraserSize={eraserSize}
         installAvailable={Boolean(installPrompt)}
         isIos={clientSession.isIos}
         isMenuOpen={menuOpen}
         isStandalone={isStandalone}
+        onBrushSizeChange={setBrushSize}
         onColorChange={(color) => {
-          setToolMode("brush");
+          if (toolMode !== "text") {
+            setToolMode("brush");
+          }
           setActiveColor(color);
         }}
+        onEraserSizeChange={setEraserSize}
         onInstall={handleInstall}
         onOpenAbout={() => {
           setMenuOpen(false);
           setAboutOpen(true);
         }}
         onSaveImage={handleSave}
+        onTextSizeChange={setTextSize}
         onToggleMenu={() => setMenuOpen((current) => !current)}
         onToolModeChange={setToolMode}
-        onWallChange={setActiveWall}
+        onWallChange={(wallId) => {
+          setIsLoading(true);
+          setStatusMessage(null);
+          startTransition(() => {
+            setItems([]);
+          });
+          setActiveWall(wallId);
+        }}
         statusMessage={statusMessage}
+        textSize={textSize}
         toolMode={toolMode}
         wallOptions={WALL_PRESETS.map(({ id, label }) => ({ id, label }))}
       />

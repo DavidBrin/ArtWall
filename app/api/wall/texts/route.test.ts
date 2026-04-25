@@ -13,24 +13,22 @@ vi.mock("@/lib/supabase/server", () => ({
 
 import { POST } from "./route";
 
-describe("POST /api/wall/strokes", () => {
+describe("POST /api/wall/texts", () => {
   beforeEach(() => {
     single.mockReset();
     insert.mockClear();
     from.mockClear();
   });
 
-  it("returns 201 for a valid stroke payload", async () => {
+  it("returns 201 for a valid text payload", async () => {
     single.mockResolvedValue({
       data: {
-        id: "0f7770f1-887d-44c9-af7f-b80ef49264e8",
-        wall_id: "street",
-        points: [
-          [0.1, 0.1],
-          [0.2, 0.2],
-        ],
-        color: "#1f1b18",
-        width: 4,
+        id: "e7afb1a2-d6e0-4927-80b7-b2f204dbc3d3",
+        wall_id: "chalkboard",
+        text: "chalk club",
+        position: [0.25, 0.35],
+        color: "#f2ecdf",
+        font_size: 32,
         created_at: "2026-04-24T20:00:00.000Z",
         client_id: "anon-123",
       },
@@ -38,19 +36,17 @@ describe("POST /api/wall/strokes", () => {
     });
 
     const response = await POST(
-      new Request("http://localhost/api/wall/strokes", {
+      new Request("http://localhost/api/wall/texts", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          wallId: "street",
-          points: [
-            [0.1, 0.1],
-            [0.2, 0.2],
-          ],
-          color: "#1f1b18",
-          width: 4,
+          wallId: "chalkboard",
+          text: "chalk club",
+          position: [0.25, 0.35],
+          color: "#f2ecdf",
+          fontSize: 32,
           clientId: "anon-123",
         }),
       }),
@@ -58,26 +54,27 @@ describe("POST /api/wall/strokes", () => {
 
     expect(response.status).toBe(201);
     await expect(response.json()).resolves.toMatchObject({
-      stroke: {
-        id: "0f7770f1-887d-44c9-af7f-b80ef49264e8",
-        wallId: "street",
+      text: {
+        id: "e7afb1a2-d6e0-4927-80b7-b2f204dbc3d3",
+        wallId: "chalkboard",
       },
     });
-    expect(from).toHaveBeenCalledWith("strokes");
+    expect(from).toHaveBeenCalledWith("wall_texts");
   });
 
-  it("returns 400 for an invalid payload", async () => {
+  it("returns 400 for an invalid text payload", async () => {
     const response = await POST(
-      new Request("http://localhost/api/wall/strokes", {
+      new Request("http://localhost/api/wall/texts", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          wallId: "street",
-          points: [[1.5, 0.5]],
+          wallId: "chalkboard",
+          text: "",
+          position: [1.5, 0.2],
           color: "nope",
-          width: 999,
+          fontSize: 200,
           clientId: "",
         }),
       }),

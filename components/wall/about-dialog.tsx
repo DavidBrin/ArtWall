@@ -67,7 +67,7 @@ export function AboutDialog({ open, onClose }: AboutDialogProps) {
           </button>
         </div>
         <p className="mt-5 text-sm leading-7 text-[rgba(31,25,20,0.76)]">
-          This site is a shared public wall. Every visitor sees the same canvas, and new strokes are
+          This site is a shared public wall collection. Each wall keeps its own canvas, and new art is
           meant to appear for everyone in near real time.
         </p>
         <p className="mt-4 text-sm leading-7 text-[rgba(31,25,20,0.76)]">
