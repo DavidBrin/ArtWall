@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f7f1e3;
+  --foreground: #1f1914;
+  --panel: rgba(255, 251, 243, 0.86);
+  --panel-strong: rgba(255, 251, 243, 0.94);
+  --panel-soft: rgba(255, 251, 243, 0.72);
+  --line: rgba(31, 25, 20, 0.14);
+  --shadow: rgba(74, 54, 37, 0.16);
+  --accent: #c76d3a;
+  --accent-deep: #25586e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at top, rgba(255, 221, 167, 0.56), transparent 34%),
+    linear-gradient(180deg, #fffaf2 0%, #f5ecdb 100%);
+  color: var(--foreground);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.18;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.3) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(31, 25, 20, 0.04) 1px, transparent 1px);
+  background-size: 100% 100%, 48px 48px;
+  mix-blend-mode: multiply;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+}
+
+::selection {
+  background: rgba(226, 141, 84, 0.22);
+}
+
+@keyframes drift-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
