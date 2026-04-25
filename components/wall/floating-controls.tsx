@@ -3,16 +3,37 @@
 import { useEffect, useEffectEvent, useRef } from "react";
 import { InstallSheet } from "./install-sheet";
 
+type ToolMode = "brush" | "eraser";
+type WallPresetId = "street" | "ideas" | "chalkboard";
+
+type ColorOption = {
+  value: string;
+  label: string;
+};
+
+type WallOption = {
+  id: WallPresetId;
+  label: string;
+};
+
 type FloatingControlsProps = {
   isMenuOpen: boolean;
   installAvailable: boolean;
   isIos: boolean;
   isStandalone: boolean;
   statusMessage: string | null;
+  toolMode: ToolMode;
+  colorOptions: ColorOption[];
+  activeColor: string;
+  wallOptions: WallOption[];
+  activeWall: WallPresetId;
   onToggleMenu: () => void;
   onOpenAbout: () => void;
   onInstall: () => Promise<void> | void;
   onSaveImage: () => void;
+  onToolModeChange: (mode: ToolMode) => void;
+  onColorChange: (color: string) => void;
+  onWallChange: (wall: WallPresetId) => void;
 };
 
 export function FloatingControls({
@@ -21,10 +42,18 @@ export function FloatingControls({
   isIos,
   isStandalone,
   statusMessage,
+  toolMode,
+  colorOptions,
+  activeColor,
+  wallOptions,
+  activeWall,
   onToggleMenu,
   onOpenAbout,
   onInstall,
   onSaveImage,
+  onToolModeChange,
+  onColorChange,
+  onWallChange,
 }: FloatingControlsProps) {
   const controlsRef = useRef<HTMLDivElement>(null);
 
@@ -46,19 +75,25 @@ export function FloatingControls({
   }, []);
 
   return (
-    <div className="absolute inset-x-0 bottom-5 z-30 flex justify-center px-4">
+    <div className="absolute inset-x-0 bottom-[max(1.25rem,env(safe-area-inset-bottom))] z-30 flex justify-center px-4">
       <div className="flex flex-col items-center gap-4" ref={controlsRef}>
         {isMenuOpen ? (
-          <div
-            className="w-[min(92vw,24rem)] animate-[drift-in_220ms_ease-out] rounded-[1.5rem] border border-[var(--line)] bg-[var(--panel)] p-4 shadow-[0_24px_70px_var(--shadow)] backdrop-blur-xl"
-          >
+          <div className="w-[min(92vw,24rem)] animate-[drift-in_220ms_ease-out] rounded-[1.5rem] border border-[var(--line)] bg-[var(--panel)] p-4 shadow-[0_24px_70px_var(--shadow)] backdrop-blur-xl">
             <InstallSheet
+              activeColor={activeColor}
+              activeWall={activeWall}
+              colorOptions={colorOptions}
               installAvailable={installAvailable}
               isIos={isIos}
               isStandalone={isStandalone}
+              onColorChange={onColorChange}
               onInstall={onInstall}
               onSaveImage={onSaveImage}
+              onToolModeChange={onToolModeChange}
+              onWallChange={onWallChange}
               statusMessage={statusMessage}
+              toolMode={toolMode}
+              wallOptions={wallOptions}
             />
           </div>
         ) : null}
