@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useEffectEvent, useRef } from "react";
+import type { WallPresetId } from "@/lib/types/wall";
 import { InstallSheet } from "./install-sheet";
 
-type ToolMode = "brush" | "eraser";
-type WallPresetId = "street" | "ideas" | "chalkboard";
+type ToolMode = "brush" | "eraser" | "text";
 
 type ColorOption = {
   value: string;
@@ -27,6 +27,9 @@ type FloatingControlsProps = {
   activeColor: string;
   wallOptions: WallOption[];
   activeWall: WallPresetId;
+  brushSize: number;
+  eraserSize: number;
+  textSize: number;
   onToggleMenu: () => void;
   onOpenAbout: () => void;
   onInstall: () => Promise<void> | void;
@@ -34,6 +37,9 @@ type FloatingControlsProps = {
   onToolModeChange: (mode: ToolMode) => void;
   onColorChange: (color: string) => void;
   onWallChange: (wall: WallPresetId) => void;
+  onBrushSizeChange: (size: number) => void;
+  onEraserSizeChange: (size: number) => void;
+  onTextSizeChange: (size: number) => void;
 };
 
 export function FloatingControls({
@@ -47,6 +53,9 @@ export function FloatingControls({
   activeColor,
   wallOptions,
   activeWall,
+  brushSize,
+  eraserSize,
+  textSize,
   onToggleMenu,
   onOpenAbout,
   onInstall,
@@ -54,6 +63,9 @@ export function FloatingControls({
   onToolModeChange,
   onColorChange,
   onWallChange,
+  onBrushSizeChange,
+  onEraserSizeChange,
+  onTextSizeChange,
 }: FloatingControlsProps) {
   const controlsRef = useRef<HTMLDivElement>(null);
 
@@ -82,16 +94,22 @@ export function FloatingControls({
             <InstallSheet
               activeColor={activeColor}
               activeWall={activeWall}
+              brushSize={brushSize}
               colorOptions={colorOptions}
+              eraserSize={eraserSize}
               installAvailable={installAvailable}
               isIos={isIos}
               isStandalone={isStandalone}
+              onBrushSizeChange={onBrushSizeChange}
               onColorChange={onColorChange}
+              onEraserSizeChange={onEraserSizeChange}
               onInstall={onInstall}
               onSaveImage={onSaveImage}
+              onTextSizeChange={onTextSizeChange}
               onToolModeChange={onToolModeChange}
               onWallChange={onWallChange}
               statusMessage={statusMessage}
+              textSize={textSize}
               toolMode={toolMode}
               wallOptions={wallOptions}
             />

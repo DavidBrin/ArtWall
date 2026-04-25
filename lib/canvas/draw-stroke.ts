@@ -1,4 +1,4 @@
-import type { Point, Stroke } from "@/lib/types/wall";
+import type { Point, Stroke, WallText } from "@/lib/types/wall";
 
 type CanvasSize = {
   width: number;
@@ -73,5 +73,33 @@ export function drawStroke(
   context.lineTo(last.x, last.y);
 
   context.stroke();
+  context.restore();
+}
+
+export function drawWallText(
+  context: CanvasRenderingContext2D,
+  textItem: Pick<WallText, "text" | "position" | "color" | "fontSize">,
+  size: CanvasSize,
+) {
+  const origin = toPixels(textItem.position, size);
+  const lines = textItem.text.split(/\r?\n/).filter((line) => line.length > 0);
+
+  if (lines.length === 0) {
+    return;
+  }
+
+  context.save();
+  context.fillStyle = textItem.color;
+  context.font = `${textItem.fontSize}px "Space Grotesk", ui-sans-serif, system-ui, sans-serif`;
+  context.textBaseline = "top";
+  context.shadowColor = "rgba(255, 255, 255, 0.22)";
+  context.shadowBlur = 6;
+
+  const lineHeight = Math.round(textItem.fontSize * 1.2);
+
+  lines.forEach((line, index) => {
+    context.fillText(line, origin.x, origin.y + index * lineHeight);
+  });
+
   context.restore();
 }

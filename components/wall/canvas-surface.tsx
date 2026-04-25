@@ -6,17 +6,28 @@ import {
   useEffectEvent,
   useImperativeHandle,
   useRef,
+  useState,
 } from "react";
-import { drawStroke, fillWallBackground } from "@/lib/canvas/draw-stroke";
+import { drawStroke, drawWallText, fillWallBackground } from "@/lib/canvas/draw-stroke";
 import { normalizePointerPoint, pointDistance } from "@/lib/canvas/normalize-point";
-import type { Point, Stroke } from "@/lib/types/wall";
+import type { Point, WallItem } from "@/lib/types/wall";
+
+type ToolMode = "brush" | "eraser" | "text";
 
 type CanvasSurfaceProps = {
-  strokes: Stroke[];
+  items: WallItem[];
+  toolMode: ToolMode;
   color: string;
   width: number;
+  textFontSize: number;
   wallImageUrl: string;
-  onCommit: (stroke: { points: Point[] }) => Promise<void> | void;
+  onCommitStroke: (stroke: { points: Point[] }) => Promise<void> | void;
+  onCommitText: (text: { text: string; position: Point; fontSize: number }) => Promise<void> | void;
+};
+
+type TextDraft = {
+  position: Point;
+  value: string;
 };
 
 export type CanvasSurfaceHandle = {
@@ -24,11 +35,16 @@ export type CanvasSurfaceHandle = {
 };
 
 export const CanvasSurface = forwardRef<CanvasSurfaceHandle, CanvasSurfaceProps>(
-  function CanvasSurface({ strokes, color, width, wallImageUrl, onCommit }, ref) {
+  function CanvasSurface(
+    { items, toolMode, color, width, textFontSize, wallImageUrl, onCommitStroke, onCommitText },
+    ref,
+  ) {
     const containerRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const textInputRef = useRef<HTMLTextAreaElement>(null);
     const drawingRef = useRef(false);
     const pointsRef = useRef<Point[]>([]);
+    const [textDraft, setTextDraft] = useState<TextDraft | null>(null);
 
     const redraw = useEffectEvent(() => {
       const canvas = canvasRef.current;
@@ -47,7 +63,10 @@ export const CanvasSurface = forwardRef<CanvasSurfaceHandle, CanvasSurfaceProps>
       const heightPx = container.clientHeight;
       const ratio = window.devicePixelRatio || 1;
 
-      if (canvas.width !== Math.floor(widthPx * ratio) || canvas.height !== Math.floor(heightPx * ratio)) {
+      if (
+        canvas.width !== Math.floor(widthPx * ratio) ||
+        canvas.height !== Math.floor(heightPx * ratio)
+      ) {
         canvas.width = Math.floor(widthPx * ratio);
         canvas.height = Math.floor(heightPx * ratio);
         canvas.style.width = `${widthPx}px`;
@@ -58,11 +77,16 @@ export const CanvasSurface = forwardRef<CanvasSurfaceHandle, CanvasSurfaceProps>
       context.clearRect(0, 0, canvas.width, canvas.height);
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
 
-      for (const stroke of strokes) {
-        drawStroke(context, stroke, { width: widthPx, height: heightPx });
+      for (const item of items) {
+        if (item.kind === "stroke") {
+          drawStroke(context, item, { width: widthPx, height: heightPx });
+          continue;
+        }
+
+        drawWallText(context, item, { width: widthPx, height: heightPx });
       }
 
-      if (pointsRef.current.length >= 2) {
+      if (toolMode !== "text" && pointsRef.current.length >= 2) {
         drawStroke(
           context,
           {
@@ -105,7 +129,7 @@ export const CanvasSurface = forwardRef<CanvasSurfaceHandle, CanvasSurfaceProps>
 
     useEffect(() => {
       redraw();
-    }, [color, strokes, width]);
+    }, [color, items, toolMode, width]);
 
     useEffect(() => {
       redraw();
@@ -122,6 +146,20 @@ export const CanvasSurface = forwardRef<CanvasSurfaceHandle, CanvasSurfaceProps>
         resizeObserver.disconnect();
       };
     }, []);
+
+    useEffect(() => {
+      if (toolMode !== "text") {
+        setTextDraft(null);
+      }
+    }, [toolMode]);
+
+    useEffect(() => {
+      if (!textDraft) {
+        return;
+      }
+
+      textInputRef.current?.focus();
+    }, [textDraft]);
 
     useImperativeHandle(ref, () => ({
       savePng(filename = "digital-art-wall.png") {
@@ -149,6 +187,12 @@ export const CanvasSurface = forwardRef<CanvasSurfaceHandle, CanvasSurfaceProps>
     }));
 
     function beginStroke(event: React.PointerEvent<HTMLCanvasElement>) {
+      if (toolMode === "text") {
+        const position = normalizePointerPoint(event, event.currentTarget);
+        setTextDraft({ position, value: "" });
+        return;
+      }
+
       if (event.button !== 0 && event.pointerType !== "touch" && event.pointerType !== "pen") {
         return;
       }
@@ -191,13 +235,35 @@ export const CanvasSurface = forwardRef<CanvasSurfaceHandle, CanvasSurfaceProps>
       redraw();
 
       if (committedPoints.length >= 2) {
-        await onCommit({ points: committedPoints });
+        await onCommitStroke({ points: committedPoints });
       }
+    }
+
+    async function submitTextDraft() {
+      if (!textDraft) {
+        return;
+      }
+
+      const trimmed = textDraft.value.trim();
+      const draft = textDraft;
+      setTextDraft(null);
+
+      if (trimmed.length === 0) {
+        return;
+      }
+
+      await onCommitText({
+        text: trimmed,
+        position: draft.position,
+        fontSize: textFontSize,
+      });
     }
 
     return (
       <section
-        className="relative min-h-dvh w-full cursor-crosshair overflow-hidden touch-none bg-cover bg-center bg-no-repeat"
+        className={`relative min-h-dvh w-full overflow-hidden touch-none bg-cover bg-center bg-no-repeat ${
+          toolMode === "text" ? "cursor-text" : "cursor-crosshair"
+        }`}
         ref={containerRef}
         style={{ backgroundImage: `url(${wallImageUrl})` }}
       >
@@ -212,6 +278,72 @@ export const CanvasSurface = forwardRef<CanvasSurfaceHandle, CanvasSurfaceProps>
           onPointerUp={finishStroke}
           ref={canvasRef}
         />
+        {textDraft ? (
+          <div
+            className="absolute z-20 w-[min(18rem,70vw)] rounded-3xl border border-[var(--line)] bg-[var(--panel-strong)] p-3 shadow-[0_20px_40px_var(--shadow)] backdrop-blur"
+            style={{
+              left: `${textDraft.position[0] * 100}%`,
+              top: `${textDraft.position[1] * 100}%`,
+              transform: "translate(-10%, -18%)",
+            }}
+          >
+            <label className="sr-only" htmlFor="wall-text-draft">
+              Text to place on wall
+            </label>
+            <textarea
+              className="min-h-24 w-full resize-none rounded-2xl border border-[var(--line)] bg-white/80 px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent-deep)]"
+              id="wall-text-draft"
+              onChange={(event) => {
+                setTextDraft((current) =>
+                  current
+                    ? {
+                        ...current,
+                        value: event.currentTarget.value,
+                      }
+                    : current,
+                );
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  setTextDraft(null);
+                }
+
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  void submitTextDraft();
+                }
+              }}
+              placeholder="Type something for the wall"
+              ref={textInputRef}
+              rows={3}
+              value={textDraft.value}
+            />
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <p className="text-xs uppercase tracking-[0.18em] text-[rgba(31,25,20,0.52)]">
+                Enter to place
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  className="rounded-full border border-[var(--line)] px-3 py-1.5 text-sm text-[rgba(31,25,20,0.7)] transition hover:bg-white"
+                  onClick={() => setTextDraft(null)}
+                  type="button"
+                >
+                  Cancel
+                </button>
+                <button
+                  className="rounded-full border border-[var(--line)] bg-[rgba(37,88,110,0.12)] px-3 py-1.5 text-sm font-medium text-[var(--foreground)] transition hover:bg-[rgba(37,88,110,0.18)]"
+                  onClick={() => {
+                    void submitTextDraft();
+                  }}
+                  type="button"
+                >
+                  Add text
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </section>
     );
   },
