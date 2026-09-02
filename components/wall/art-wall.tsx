@@ -1,9 +1,6 @@
 "use client";
 
 import { startTransition, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
-import type { RealtimePostgresInsertPayload } from "@supabase/supabase-js";
-import { serializeStrokeRow, serializeTextRow } from "@/lib/api/wall";
-import { getBrowserSupabase } from "@/lib/supabase/browser";
 import type {
   CreateStrokeInput,
   CreateTextInput,
@@ -68,7 +65,7 @@ const WALL_PRESETS: WallPreset[] = [
   {
     id: "chalkboard",
     label: "Chalkboard",
-    imageUrl: "/walls/chalkboard-wall.svg",
+    imageUrl: "/walls/chalkboard-wall.jpg",
     eraserColor: "#224236",
   },
 ];
@@ -166,7 +163,7 @@ export function ArtWall() {
   const drawColor = toolMode === "eraser" ? activeWallPreset.eraserColor : activeColor;
   const drawWidth = toolMode === "eraser" ? eraserSize : brushSize;
 
-  const loadWall = useEffectEvent(async (wallId: WallPresetId, requestId: number) => {
+  const loadWall = useEffectEvent(async (wallId: WallPresetId, requestId: number, silent = false) => {
     try {
       const response = await fetch(`/api/wall?wallId=${wallId}`, {
         cache: "no-store",
@@ -193,9 +190,11 @@ export function ArtWall() {
         return;
       }
 
-      setStatusMessage("Live wall unavailable until Supabase is configured.");
+      if (!silent) {
+        setStatusMessage("Live wall unavailable until the database is configured.");
+      }
     } finally {
-      if (requestId === loadRequestRef.current) {
+      if (!silent && requestId === loadRequestRef.current) {
         setIsLoading(false);
       }
     }
@@ -252,115 +251,23 @@ export function ArtWall() {
   }, []);
 
   useEffect(() => {
-    const hasSupabase =
-      Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL) &&
-      Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+    const poll = window.setInterval(() => {
+      void loadWall(activeWall, loadRequestRef.current, true);
+    }, 2500);
 
-    if (!hasSupabase) {
-      return;
-    }
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void loadWall(activeWall, loadRequestRef.current, true);
+      }
+    };
 
-    let unsubscribe = () => undefined;
-
-    try {
-      const supabase = getBrowserSupabase();
-      const channel = supabase
-        .channel(`digital-art-wall:${activeWall}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "strokes",
-            filter: `wall_id=eq.${activeWall}`,
-          },
-          (payload: RealtimePostgresInsertPayload<Record<string, unknown>>) => {
-            const incoming = serializeStrokeRow({
-              id: String(payload.new.id),
-              wall_id: String(payload.new.wall_id),
-              points: payload.new.points,
-              color: String(payload.new.color),
-              width: Number(payload.new.width),
-              created_at: String(payload.new.created_at),
-              client_id: String(payload.new.client_id),
-            });
-
-            const incomingSignature = JSON.stringify({
-              wallId: incoming.wallId,
-              points: incoming.points,
-              color: incoming.color,
-              width: incoming.width,
-              clientId: incoming.clientId,
-            });
-
-            if (
-              incoming.clientId === clientSession.id &&
-              pendingStrokeSignaturesRef.current.has(incomingSignature)
-            ) {
-              pendingStrokeSignaturesRef.current.delete(incomingSignature);
-              return;
-            }
-
-            startTransition(() => {
-              setItems((current) => insertWallItem(current, incoming));
-            });
-          },
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "wall_texts",
-            filter: `wall_id=eq.${activeWall}`,
-          },
-          (payload: RealtimePostgresInsertPayload<Record<string, unknown>>) => {
-            const incoming = serializeTextRow({
-              id: String(payload.new.id),
-              wall_id: String(payload.new.wall_id),
-              text: String(payload.new.text),
-              position: payload.new.position,
-              color: String(payload.new.color),
-              font_size: Number(payload.new.font_size),
-              created_at: String(payload.new.created_at),
-              client_id: String(payload.new.client_id),
-            });
-
-            const incomingSignature = JSON.stringify({
-              wallId: incoming.wallId,
-              text: incoming.text,
-              position: incoming.position,
-              color: incoming.color,
-              fontSize: incoming.fontSize,
-              clientId: incoming.clientId,
-            });
-
-            if (
-              incoming.clientId === clientSession.id &&
-              pendingTextSignaturesRef.current.has(incomingSignature)
-            ) {
-              pendingTextSignaturesRef.current.delete(incomingSignature);
-              return;
-            }
-
-            startTransition(() => {
-              setItems((current) => insertWallItem(current, incoming));
-            });
-          },
-        )
-        .subscribe();
-
-      unsubscribe = () => {
-        void supabase.removeChannel(channel);
-      };
-    } catch (error) {
-      console.error("Failed to start realtime subscription", error);
-    }
+    document.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
-      unsubscribe();
+      window.clearInterval(poll);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [activeWall, clientSession.id]);
+  }, [activeWall]);
 
   async function handleStrokeCommit(input: Omit<CreateStrokeInput, "clientId" | "color" | "width" | "wallId">) {
     const optimisticId = `local-stroke-${crypto.randomUUID()}`;

@@ -1,40 +1,30 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const single = vi.fn();
-const select = vi.fn(() => ({ single }));
-const insert = vi.fn(() => ({ select }));
-const from = vi.fn(() => ({ insert }));
+const { insertStrokeRow } = vi.hoisted(() => ({ insertStrokeRow: vi.fn() }));
 
-vi.mock("@/lib/supabase/server", () => ({
-  getServerSupabase: () => ({
-    from,
-  }),
+vi.mock("@/lib/db/server", () => ({
+  insertStrokeRow,
 }));
 
 import { POST } from "./route";
 
 describe("POST /api/wall/strokes", () => {
   beforeEach(() => {
-    single.mockReset();
-    insert.mockClear();
-    from.mockClear();
+    insertStrokeRow.mockReset();
   });
 
   it("returns 201 for a valid stroke payload", async () => {
-    single.mockResolvedValue({
-      data: {
-        id: "0f7770f1-887d-44c9-af7f-b80ef49264e8",
-        wall_id: "street",
-        points: [
-          [0.1, 0.1],
-          [0.2, 0.2],
-        ],
-        color: "#1f1b18",
-        width: 4,
-        created_at: "2026-04-24T20:00:00.000Z",
-        client_id: "anon-123",
-      },
-      error: null,
+    insertStrokeRow.mockResolvedValue({
+      id: "0f7770f1-887d-44c9-af7f-b80ef49264e8",
+      wall_id: "street",
+      points: [
+        [0.1, 0.1],
+        [0.2, 0.2],
+      ],
+      color: "#1f1b18",
+      width: 4,
+      created_at: "2026-04-24T20:00:00.000Z",
+      client_id: "anon-123",
     });
 
     const response = await POST(
@@ -63,7 +53,16 @@ describe("POST /api/wall/strokes", () => {
         wallId: "street",
       },
     });
-    expect(from).toHaveBeenCalledWith("strokes");
+    expect(insertStrokeRow).toHaveBeenCalledWith({
+      wall_id: "street",
+      points: [
+        [0.1, 0.1],
+        [0.2, 0.2],
+      ],
+      color: "#1f1b18",
+      width: 4,
+      client_id: "anon-123",
+    });
   });
 
   it("returns 400 for an invalid payload", async () => {
@@ -84,6 +83,6 @@ describe("POST /api/wall/strokes", () => {
     );
 
     expect(response.status).toBe(400);
-    expect(from).not.toHaveBeenCalled();
+    expect(insertStrokeRow).not.toHaveBeenCalled();
   });
 });

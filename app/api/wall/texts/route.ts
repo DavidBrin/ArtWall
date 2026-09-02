@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { serializeTextRow, toTextInsert } from "@/lib/api/wall";
-import { getServerSupabase } from "@/lib/supabase/server";
+import { insertTextRow } from "@/lib/db/server";
 import { createTextSchema } from "@/lib/validation/stroke";
 
 export const dynamic = "force-dynamic";
@@ -27,23 +27,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    const supabase = getServerSupabase();
-    const { data, error } = await supabase
-      .from("wall_texts")
-      .insert(toTextInsert(payloadResult.data))
-      .select("id, wall_id, text, position, color, font_size, created_at, client_id")
-      .single();
-
-    if (error) {
-      console.error("Failed to persist wall text", error);
-      return NextResponse.json(
-        { error: "Unable to save the text right now." },
-        { status: 500 },
-      );
-    }
-
+    const insert = toTextInsert(payloadResult.data);
+    const row = await insertTextRow(insert);
     return NextResponse.json(
-      { text: serializeTextRow(data) },
+      { text: serializeTextRow(row) },
       {
         status: 201,
         headers: {
@@ -52,9 +39,9 @@ export async function POST(request: Request) {
       },
     );
   } catch (error) {
-    console.error("Text route configuration error", error);
+    console.error("Failed to persist wall text", error);
     return NextResponse.json(
-      { error: "Server configuration is incomplete." },
+      { error: "Unable to save the text right now." },
       { status: 500 },
     );
   }

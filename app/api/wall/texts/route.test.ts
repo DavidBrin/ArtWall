@@ -1,38 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const single = vi.fn();
-const select = vi.fn(() => ({ single }));
-const insert = vi.fn(() => ({ select }));
-const from = vi.fn(() => ({ insert }));
+const { insertTextRow } = vi.hoisted(() => ({ insertTextRow: vi.fn() }));
 
-vi.mock("@/lib/supabase/server", () => ({
-  getServerSupabase: () => ({
-    from,
-  }),
+vi.mock("@/lib/db/server", () => ({
+  insertTextRow,
 }));
 
 import { POST } from "./route";
 
 describe("POST /api/wall/texts", () => {
   beforeEach(() => {
-    single.mockReset();
-    insert.mockClear();
-    from.mockClear();
+    insertTextRow.mockReset();
   });
 
   it("returns 201 for a valid text payload", async () => {
-    single.mockResolvedValue({
-      data: {
-        id: "e7afb1a2-d6e0-4927-80b7-b2f204dbc3d3",
-        wall_id: "chalkboard",
-        text: "chalk club",
-        position: [0.25, 0.35],
-        color: "#f2ecdf",
-        font_size: 32,
-        created_at: "2026-04-24T20:00:00.000Z",
-        client_id: "anon-123",
-      },
-      error: null,
+    insertTextRow.mockResolvedValue({
+      id: "e7afb1a2-d6e0-4927-80b7-b2f204dbc3d3",
+      wall_id: "chalkboard",
+      text: "chalk club",
+      position: [0.25, 0.35],
+      color: "#f2ecdf",
+      font_size: 32,
+      created_at: "2026-04-24T20:00:00.000Z",
+      client_id: "anon-123",
     });
 
     const response = await POST(
@@ -59,7 +49,14 @@ describe("POST /api/wall/texts", () => {
         wallId: "chalkboard",
       },
     });
-    expect(from).toHaveBeenCalledWith("wall_texts");
+    expect(insertTextRow).toHaveBeenCalledWith({
+      wall_id: "chalkboard",
+      text: "chalk club",
+      position: [0.25, 0.35],
+      color: "#f2ecdf",
+      font_size: 32,
+      client_id: "anon-123",
+    });
   });
 
   it("returns 400 for an invalid text payload", async () => {
@@ -81,6 +78,6 @@ describe("POST /api/wall/texts", () => {
     );
 
     expect(response.status).toBe(400);
-    expect(from).not.toHaveBeenCalled();
+    expect(insertTextRow).not.toHaveBeenCalled();
   });
 });

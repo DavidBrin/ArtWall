@@ -2,6 +2,7 @@ node_modules
 .next
 out
 .vercel
+.vercel
 .turbo
 coverage
 dist
@@ -19,3 +20,4 @@ pnpm-debug.log*
 
 *.tsbuildinfo
 
+.env*

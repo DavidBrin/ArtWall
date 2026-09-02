@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { serializeStrokeRow, toStrokeInsert } from "@/lib/api/wall";
-import { getServerSupabase } from "@/lib/supabase/server";
+import { insertStrokeRow } from "@/lib/db/server";
 import { createStrokeSchema } from "@/lib/validation/stroke";
 
 export const dynamic = "force-dynamic";
@@ -27,32 +27,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    const supabase = getServerSupabase();
-    const { wallId, points, color, width, clientId } = payloadResult.data;
-    const { data, error } = await supabase
-      .from("strokes")
-      .insert(
-        toStrokeInsert({
-          wallId,
-          points,
-          color,
-          width,
-          clientId,
-        }),
-      )
-      .select("id, wall_id, points, color, width, created_at, client_id")
-      .single();
-
-    if (error) {
-      console.error("Failed to persist stroke", error);
-      return NextResponse.json(
-        { error: "Unable to save the stroke right now." },
-        { status: 500 },
-      );
-    }
-
+    const insert = toStrokeInsert(payloadResult.data);
+    const row = await insertStrokeRow(insert);
     return NextResponse.json(
-      { stroke: serializeStrokeRow(data) },
+      { stroke: serializeStrokeRow(row) },
       {
         status: 201,
         headers: {
@@ -61,9 +39,9 @@ export async function POST(request: Request) {
       },
     );
   } catch (error) {
-    console.error("Stroke route configuration error", error);
+    console.error("Failed to persist stroke", error);
     return NextResponse.json(
-      { error: "Server configuration is incomplete." },
+      { error: "Unable to save the stroke right now." },
       { status: 500 },
     );
   }
