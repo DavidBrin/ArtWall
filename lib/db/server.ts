@@ -47,46 +47,58 @@ export type TextRow = {
   client_id: string;
 };
 
+function asRows<T>(rows: unknown): T[] {
+  return rows as T[];
+}
+
 export async function listStrokeRows(wallId: string, limit: number, cursor?: string): Promise<StrokeRow[]> {
   const db = getSql();
   if (cursor) {
-    return db`
+    return asRows<StrokeRow>(
+      await db`
       select id, wall_id, points, color, width, created_at, client_id
       from strokes
       where wall_id = ${wallId} and created_at < ${cursor}::timestamptz
       order by created_at desc
       limit ${limit}
-    ` as Promise<StrokeRow[]>;
+    `,
+    );
   }
 
-  return db`
+  return asRows<StrokeRow>(
+    await db`
     select id, wall_id, points, color, width, created_at, client_id
     from strokes
     where wall_id = ${wallId}
     order by created_at desc
     limit ${limit}
-  ` as Promise<StrokeRow[]>;
+  `,
+  );
 }
 
 export async function listTextRows(wallId: string, limit: number, cursor?: string): Promise<TextRow[]> {
   const db = getSql();
   if (cursor) {
-    return db`
+    return asRows<TextRow>(
+      await db`
       select id, wall_id, text, position, color, font_size, created_at, client_id
       from wall_texts
       where wall_id = ${wallId} and created_at < ${cursor}::timestamptz
       order by created_at desc
       limit ${limit}
-    ` as Promise<TextRow[]>;
+    `,
+    );
   }
 
-  return db`
+  return asRows<TextRow>(
+    await db`
     select id, wall_id, text, position, color, font_size, created_at, client_id
     from wall_texts
     where wall_id = ${wallId}
     order by created_at desc
     limit ${limit}
-  ` as Promise<TextRow[]>;
+  `,
+  );
 }
 
 export async function insertStrokeRow(row: {
@@ -97,11 +109,13 @@ export async function insertStrokeRow(row: {
   client_id: string;
 }): Promise<StrokeRow> {
   const db = getSql();
-  const rows = (await db`
+  const rows = asRows<StrokeRow>(
+    await db`
     insert into strokes (wall_id, points, color, width, client_id)
     values (${row.wall_id}, ${JSON.stringify(row.points)}::jsonb, ${row.color}, ${row.width}, ${row.client_id})
     returning id, wall_id, points, color, width, created_at, client_id
-  `) as StrokeRow[];
+  `,
+  );
 
   if (!rows[0]) {
     throw new Error("Stroke insert returned no row.");
@@ -119,11 +133,13 @@ export async function insertTextRow(row: {
   client_id: string;
 }): Promise<TextRow> {
   const db = getSql();
-  const rows = (await db`
+  const rows = asRows<TextRow>(
+    await db`
     insert into wall_texts (wall_id, text, position, color, font_size, client_id)
     values (${row.wall_id}, ${row.text}, ${JSON.stringify(row.position)}::jsonb, ${row.color}, ${row.font_size}, ${row.client_id})
     returning id, wall_id, text, position, color, font_size, created_at, client_id
-  `) as TextRow[];
+  `,
+  );
 
   if (!rows[0]) {
     throw new Error("Text insert returned no row.");
