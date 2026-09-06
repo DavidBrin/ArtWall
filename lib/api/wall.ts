@@ -8,6 +8,7 @@ import type {
   WallResponse,
   WallText,
 } from "@/lib/types/wall";
+import { strokeShouldErase } from "@/lib/canvas/draw-stroke";
 import { DEFAULT_WALL_LIMIT, strokeRowSchema, textRowSchema } from "@/lib/validation/stroke";
 
 type StrokeRow = {
@@ -18,6 +19,7 @@ type StrokeRow = {
   width: number;
   created_at: string;
   client_id: string;
+  is_eraser?: boolean;
 };
 
 type TextRow = {
@@ -42,9 +44,16 @@ async function readJson<T>(response: Response): Promise<T> {
   return (await response.json()) as T;
 }
 
-export function serializeStrokeRow(row: StrokeRow): Stroke {
-  const parsed = strokeRowSchema.parse(row);
-
+function toStroke(parsed: {
+  id: string;
+  wall_id: Stroke["wallId"];
+  points: Stroke["points"];
+  color: string;
+  width: number;
+  created_at: string | Date;
+  client_id: string;
+  is_eraser: boolean;
+}): Stroke {
   return {
     kind: "stroke",
     id: parsed.id,
@@ -54,7 +63,12 @@ export function serializeStrokeRow(row: StrokeRow): Stroke {
     width: parsed.width,
     createdAt: new Date(parsed.created_at).toISOString(),
     clientId: parsed.client_id,
+    erase: strokeShouldErase({ color: parsed.color, erase: parsed.is_eraser }),
   };
+}
+
+export function serializeStrokeRow(row: StrokeRow): Stroke {
+  return toStroke(strokeRowSchema.parse(row));
 }
 
 export function serializeStrokeRows(rows: StrokeRow[]): Stroke[] {
@@ -66,18 +80,7 @@ export function serializeStrokeRows(rows: StrokeRow[]): Stroke[] {
       return [];
     }
 
-    return [
-      {
-        kind: "stroke",
-        id: parsed.data.id,
-        wallId: parsed.data.wall_id,
-        points: parsed.data.points,
-        color: parsed.data.color,
-        width: parsed.data.width,
-        createdAt: new Date(parsed.data.created_at).toISOString(),
-        clientId: parsed.data.client_id,
-      },
-    ];
+    return [toStroke(parsed.data)];
   });
 }
 
@@ -135,6 +138,7 @@ export function toStrokeInsert(input: CreateStrokeInput) {
     color: input.color,
     width: input.width,
     client_id: input.clientId,
+    is_eraser: input.erase === true,
   };
 }
 

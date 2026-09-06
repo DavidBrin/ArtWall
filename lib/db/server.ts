@@ -34,6 +34,7 @@ export type StrokeRow = {
   width: number;
   created_at: string;
   client_id: string;
+  is_eraser: boolean;
 };
 
 export type TextRow = {
@@ -56,7 +57,7 @@ export async function listStrokeRows(wallId: string, limit: number, cursor?: str
   if (cursor) {
     return asRows<StrokeRow>(
       await db`
-      select id, wall_id, points, color, width, created_at, client_id
+      select id, wall_id, points, color, width, created_at, client_id, is_eraser
       from strokes
       where wall_id = ${wallId} and created_at < ${cursor}::timestamptz
       order by created_at desc
@@ -67,7 +68,7 @@ export async function listStrokeRows(wallId: string, limit: number, cursor?: str
 
   return asRows<StrokeRow>(
     await db`
-    select id, wall_id, points, color, width, created_at, client_id
+    select id, wall_id, points, color, width, created_at, client_id, is_eraser
     from strokes
     where wall_id = ${wallId}
     order by created_at desc
@@ -107,13 +108,14 @@ export async function insertStrokeRow(row: {
   color: string;
   width: number;
   client_id: string;
+  is_eraser: boolean;
 }): Promise<StrokeRow> {
   const db = getSql();
   const rows = asRows<StrokeRow>(
     await db`
-    insert into strokes (wall_id, points, color, width, client_id)
-    values (${row.wall_id}, ${JSON.stringify(row.points)}::jsonb, ${row.color}, ${row.width}, ${row.client_id})
-    returning id, wall_id, points, color, width, created_at, client_id
+    insert into strokes (wall_id, points, color, width, client_id, is_eraser)
+    values (${row.wall_id}, ${JSON.stringify(row.points)}::jsonb, ${row.color}, ${row.width}, ${row.client_id}, ${row.is_eraser})
+    returning id, wall_id, points, color, width, created_at, client_id, is_eraser
   `,
   );
 

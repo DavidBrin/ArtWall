@@ -49,6 +49,7 @@ create table if not exists public.strokes (
   width integer not null,
   client_id text not null,
   created_at timestamptz not null default now(),
+  is_eraser boolean not null default false,
   constraint strokes_points_normalized check (public.stroke_points_are_normalized(points)),
   constraint strokes_color_hex check (color ~ '^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$'),
   constraint strokes_width_range check (width between 1 and 24),
@@ -81,3 +82,11 @@ create table if not exists public.wall_texts (
 
 create index if not exists wall_texts_wall_id_created_at_desc_idx
 on public.wall_texts (wall_id, created_at desc);
+
+alter table public.strokes
+  add column if not exists is_eraser boolean not null default false;
+
+update public.strokes
+set is_eraser = true
+where is_eraser = false
+  and lower(color) in ('#d1d0cc', '#f4e9cd', '#224236');

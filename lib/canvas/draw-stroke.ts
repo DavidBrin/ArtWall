@@ -5,6 +5,20 @@ type CanvasSize = {
   height: number;
 };
 
+type DrawableStroke = Pick<Stroke, "points" | "color" | "width"> & {
+  erase?: boolean;
+};
+
+// Wall-matching colors the old eraser painted with before the `erase` flag existed.
+// They stay authoritative even when the flag is false: rows written by clients that
+// predate the flag carry the column default (false), and none of these colors is in
+// the brush palette, so a stroke in one of them can only ever have been an eraser.
+const LEGACY_ERASER_COLORS = new Set(["#d1d0cc", "#f4e9cd", "#224236"]);
+
+export function strokeShouldErase(stroke: Pick<DrawableStroke, "color" | "erase">) {
+  return stroke.erase === true || LEGACY_ERASER_COLORS.has(stroke.color.toLowerCase());
+}
+
 function toPixels(point: Point, size: CanvasSize) {
   return {
     x: point[0] * size.width,
@@ -26,7 +40,7 @@ export function fillWallBackground(
 
 export function drawStroke(
   context: CanvasRenderingContext2D,
-  stroke: Pick<Stroke, "points" | "color" | "width">,
+  stroke: DrawableStroke,
   size: CanvasSize,
 ) {
   if (stroke.points.length === 0) {
@@ -34,6 +48,9 @@ export function drawStroke(
   }
 
   context.save();
+  if (strokeShouldErase(stroke)) {
+    context.globalCompositeOperation = "destination-out";
+  }
   context.strokeStyle = stroke.color;
   context.fillStyle = stroke.color;
   context.lineWidth = stroke.width;

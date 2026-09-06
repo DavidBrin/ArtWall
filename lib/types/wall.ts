@@ -16,6 +16,7 @@ export type Stroke = WallItemBase & {
   points: Point[];
   color: string;
   width: number;
+  erase: boolean;
 };
 
 export type WallText = WallItemBase & {
@@ -34,6 +35,7 @@ export type CreateStrokeInput = {
   color: string;
   width: number;
   clientId: string;
+  erase?: boolean;
 };
 
 export type CreateTextInput = {

@@ -31,6 +31,23 @@ describe("createStrokeSchema", () => {
 
     expect(result.success).toBe(false);
   });
+
+  it("accepts an eraser stroke payload", () => {
+    const result = createStrokeSchema.safeParse({
+      wallId: "street",
+      points: [
+        [0.1, 0.1],
+        [0.2, 0.2],
+      ],
+      color: "#d1d0cc",
+      width: 18,
+      clientId: "anon-123",
+      erase: true,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.erase).toBe(true);
+  });
 });
 
 describe("createTextSchema", () => {

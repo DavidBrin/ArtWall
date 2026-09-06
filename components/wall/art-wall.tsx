@@ -269,13 +269,15 @@ export function ArtWall() {
     };
   }, [activeWall]);
 
-  async function handleStrokeCommit(input: Omit<CreateStrokeInput, "clientId" | "color" | "width" | "wallId">) {
+  async function handleStrokeCommit(input: Omit<CreateStrokeInput, "clientId" | "color" | "width" | "wallId" | "erase">) {
+    const erase = toolMode === "eraser";
     const optimisticId = `local-stroke-${crypto.randomUUID()}`;
     const strokeSignature = JSON.stringify({
       wallId: activeWall,
       points: input.points,
       color: drawColor,
       width: drawWidth,
+      erase,
       clientId: clientSession.id,
     });
     pendingStrokeSignaturesRef.current.add(strokeSignature);
@@ -287,6 +289,7 @@ export function ArtWall() {
       points: input.points,
       color: drawColor,
       width: drawWidth,
+      erase,
       createdAt: new Date().toISOString(),
       clientId: clientSession.id,
     };
@@ -306,6 +309,7 @@ export function ArtWall() {
           points: input.points,
           color: drawColor,
           width: drawWidth,
+          erase,
           clientId: clientSession.id,
         } satisfies CreateStrokeInput),
       });

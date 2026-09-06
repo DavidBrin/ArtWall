@@ -47,6 +47,7 @@ export const createStrokeSchema = z.object({
   color: colorSchema,
   width: widthSchema,
   clientId: clientIdSchema,
+  erase: z.boolean().optional().default(false),
 });
 
 export const createTextSchema = z.object({
@@ -72,6 +73,7 @@ export const strokeRowSchema = z.object({
   width: widthSchema,
   created_at: z.union([z.string(), z.date()]),
   client_id: clientIdSchema,
+  is_eraser: z.boolean().optional().default(false),
 });
 
 export const textRowSchema = z.object({

@@ -62,6 +62,62 @@ describe("POST /api/wall/strokes", () => {
       color: "#1f1b18",
       width: 4,
       client_id: "anon-123",
+      is_eraser: false,
+    });
+  });
+
+  it("persists eraser strokes as destination-out marks", async () => {
+    insertStrokeRow.mockResolvedValue({
+      id: "1a7770f1-887d-44c9-af7f-b80ef49264e8",
+      wall_id: "street",
+      points: [
+        [0.1, 0.1],
+        [0.2, 0.2],
+      ],
+      color: "#d1d0cc",
+      width: 18,
+      created_at: "2026-04-24T20:00:00.000Z",
+      client_id: "anon-123",
+      is_eraser: true,
+    });
+
+    const response = await POST(
+      new Request("http://localhost/api/wall/strokes", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          wallId: "street",
+          points: [
+            [0.1, 0.1],
+            [0.2, 0.2],
+          ],
+          color: "#d1d0cc",
+          width: 18,
+          erase: true,
+          clientId: "anon-123",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toMatchObject({
+      stroke: {
+        id: "1a7770f1-887d-44c9-af7f-b80ef49264e8",
+        erase: true,
+      },
+    });
+    expect(insertStrokeRow).toHaveBeenCalledWith({
+      wall_id: "street",
+      points: [
+        [0.1, 0.1],
+        [0.2, 0.2],
+      ],
+      color: "#d1d0cc",
+      width: 18,
+      client_id: "anon-123",
+      is_eraser: true,
     });
   });
 

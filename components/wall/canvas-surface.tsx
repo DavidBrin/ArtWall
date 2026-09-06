@@ -93,6 +93,7 @@ export const CanvasSurface = forwardRef<CanvasSurfaceHandle, CanvasSurfaceProps>
             points: pointsRef.current,
             color,
             width,
+            erase: toolMode === "eraser",
           },
           { width: widthPx, height: heightPx },
         );
@@ -119,6 +120,7 @@ export const CanvasSurface = forwardRef<CanvasSurfaceHandle, CanvasSurfaceProps>
           points,
           color,
           width,
+          erase: toolMode === "eraser",
         },
         {
           width: container.clientWidth,
